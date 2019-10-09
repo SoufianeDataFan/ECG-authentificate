@@ -1,7 +1,7 @@
-""" 
-Author: Aishni Parab
-File: model_personid.py
+"""
+comments: the model would change , but good skelton
 Description: calls functions in data_processing to init data. runs trianing and testing on data.
+
 """
 from keras.layers import Dense, Dropout, Activation, Flatten, Convolution2D, MaxPooling2D
 from sklearn.metrics import classification_report,confusion_matrix
@@ -10,15 +10,15 @@ from keras.models import Sequential, load_model
 from keras import optimizers, regularizers
 from keras.utils import np_utils
 
-import data_processing as data 
+import data_processing as data
 import numpy as np
 from time import time
 import os
 
 np.random.seed(123) # for reproducibility
-    
+
 # load data
-dataset = data.getData() #instance 
+dataset = data.getData() #instance
 dataset.get()
 (X_train, Y_train), (X_test, Y_test) = (dataset.X_train, dataset.Y_train), (dataset.X_test, dataset.Y_test)
 
@@ -58,7 +58,7 @@ model.compile(loss='categorical_crossentropy',
 # fit model on training data
 tensorboard = TensorBoard(log_dir="logs_personid/{}".format(time()))
 earlystopping = EarlyStopping(monitor='val_loss', patience=10)
-history = model.fit(X_train, Y_train, 
+history = model.fit(X_train, Y_train,
           batch_size=10, validation_data=(X_test, Y_test), nb_epoch=100, verbose=1,
           callbacks = [earlystopping, tensorboard])
 
