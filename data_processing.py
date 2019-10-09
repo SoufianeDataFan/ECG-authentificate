@@ -3,18 +3,29 @@ Author: Soufiane CHAMI
 File: data_processing.py
 Description: converts .dat files to .csv and generates an aggregated dataset.
 """
+
 import os
 import glob
 import wfdb
 import pandas as pd
 from tqdm import tqdm
 
-
-# convert the recordings to .csv and save reco labels
 class Generate_csv:
 
     def __init__(self):
-        self.dir = os.getcwd() # should be smth like '/path-to-data-file/data/'
+        self.dir = '/Users/macbook/Desktop/CardioKey/GitHub/ECG_ID/DeepECG-1/data/'
+        self.database = 'ecgiddb'
+        self.persons_labels = [] #who the person is
+        self.age_labels = []     #age of thatperson
+        self.gender_labels = []  #is that person male or female
+        self.date_labels = []    #month.day.year of ecg reco
+        self.ecg_filsignal = np.array([])#pd.DataFrame() #filtered ecg dataset
+        self.ecg_signal = np.array([])#np.array([])pd.DataFrame()  #unfiltered ecg dataset
+        import os
+        if not os.path.exists(os.path.join(str(Path(self.dir).parents[0]),'processed_data')):
+            os.makedirs(os.path.join(str(Path(self.dir).parents[0]),'processed_data'))
+
+
     def get_records(self, fol_path):
         """ To get file paths """
         # There are 3 files for each record
@@ -26,7 +37,7 @@ class Generate_csv:
         return paths
 
 
-    def constructor(self):
+    def constructor(self, debug=False):
         records = self.get_records(self.dir)
         labels_df = pd.DataFrame()
         signal_id= []
@@ -35,12 +46,17 @@ class Generate_csv:
         date=[]
         fs=[]
         sig_len=[]
-
+        i =0
         for record in tqdm(records):
             data, labels = wfdb.rdsamp(record)
             data= pd.DataFrame(data, columns =labels['sig_name'])
-            data_filename= record + '.csv'
-            data.to_csv(data_filename, index=False)
+            data_filename= os.path.join(str(Path(self.dir).parents[0]),'processed_data','_'.join(record.split('/')[-2:])+'.csv')
+
+            self.ecg_filsignal = np.append(self.ecg_filsignal,np.array(data['ECG I filtered'].values))
+            self.ecg_signal = np.append(self.ecg_signal,np.array(data['ECG I'].values))
+
+            if not debug:
+                data.to_csv(data_filename, index=False)
             # parse dict
             signal_id.append('_'.join(record.split('/')[-2:]))
             age.append(int(labels['comments'][0][-2:]))
@@ -60,96 +76,23 @@ class Generate_csv:
         labels_df['fs']=fs
         labels_df['sig_len']=sig_len
 
-        lebels_filename= os.path.join('/'.join(record.split('/')[:-2]),'labels.csv')
+        lebels_filename= os.path.join(str(Path(self.dir).parents[0]),'processed_data','labels.csv')
         print('saved to', lebels_filename)
-        labels_df.to_csv(lebels_filename, index=False)
+        print(len(self.ecg_filsignal))
+        if not debug:
+            labels_df.to_csv(lebels_filename, index=False)
+            print('results saved')
+            np.savetxt(os.path.join(str(Path(self.dir).parents[0]),'processed_data', 'filecgdata.csv'), self.ecg_filsignal, delimiter=",")
+            np.savetxt(os.path.join(str(Path(self.dir).parents[0]),'processed_data', 'ecg_signal.csv'), self.ecg_signal, delimiter=",")
+        return #labels_df
 
-        return # labels_df  #optional return
 
-#generates features and labels
-class ProcessData:
-    def __init__(self):
-        self.dir = os.path.join(os.getcwd(), 'data')
-        self.persons_labels = [] #who the person is
-        self.age_labels = []     #age of thatperson
-        self.gender_labels = []  #is that person male or female
-        self.date_labels = []    #month.day.year of ecg record
-        self.ecg_filsignal = pd.DataFrame() #filtered ecg dataset
-        self.ecg_signal = pd.DataFrame()  #unfiltered ecg dataset
+    def init(self):
+        print("Exporting labels and signals to csv..")
+        Generate_csv().constructor(debug= True)
+        if(os.path.isfile(os.path.join(str(Path(self.dir).parents[0]),'processed_data', 'filecgdata' + "." + 'csv')) and os.path.isfile(os.path.join(str(Path(self.dir).parents[0]),'processed_data', 'ecg_signal' + "." + 'csv'))):
+            print("Data in processed_data/ folder is now ready for training.")
 
-  #extracts labels and features from rec_1.hea of each person
-    def extract_labels(self, filepath):
-        for folders in os.listdir(filepath):
-            if (folders.startswith('Person_')):
-                self.persons_labels.append(folders)
-            for inpersonsdir in os.listdir(os.path.join(filepath, folders)):
-              if (inpersonsdir.startswith('rec_1.') and inpersonsdir.endswith('hea')):
-                  with open(os.path.join(filepath, folders, inpersonsdir),"r") as f:
-                    array2d = [[str(token) for token in line.split()] for line in f]
-                    self.age_labels.append(array2d[4][2])
-                    self.gender_labels.append(array2d[5][2])
-                    self.date_labels.append(array2d[6][3])
-                  f.close()
-
-  #extract features from rec_1.csv of each person
-  def extract_feats(self, filepath):
-    p = 0 #person counter
-    global f_num
-    f_num = 0 #file counter
-    for folders in os.listdir(filepath):
-      if (folders.startswith('Person_')):
-        p = p + 1
-        for files in os.listdir(os.path.join(filepath, folders)):
-          if (files.endswith('csv')):
-           with open(os.path.join(filepath, folders, files), "r") as x:
-              f_num = f_num + 1
-              features = pd.read_csv(x, header=[0,1])
-              pdfeats = pd.DataFrame(features)
-              pdfeats = pdfeats.apply(pd.to_numeric)
-              temp = [p] #0th index is person_label int
-              temp1 = [p]
-              for rows in range(len(pdfeats)):
-                temp.append(pdfeats.get_value(rows, 1, True))
-                temp1.append(pdfeats.get_value(rows, 0, True))
-              tempnp = np.asarray(temp, dtype=float)
-              if (tempnp.shape == (9999,)):
-                tempnp = np.append(tempnp, tempnp[9998])
-              temp1np = np.asarray(temp1, dtype=float)
-              if (temp1np.shape == (9999,)):
-                temp1np = np.append(temp1np, tempnp[9998])
-              self.dumpfeats(tempnp,1)
-              self.dumpfeats(temp1np,2)
-           x.close()
-
-  #appends to a bigger global array
-  def dumpfeats(self, array, flag):
-    fil_df = pd.DataFrame(array)
-    fil_df = fil_df.T
-    ufil_df = pd.DataFrame(array)
-    ufil_df = ufil_df.T
-    if (flag == 1):
-      self.ecg_filsignal = self.ecg_filsignal.append(fil_df, ignore_index=True)
-    if (flag == 2):
-      self.ecg_signal = self.ecg_signal.append(ufil_df, ignore_index=True)
-
-  def init(self):
-    print("Setting up DeepECG data labels..")
-    self.extract_labels(self.dir)
-    ecglabels = [list(i) for i in zip(self.persons_labels,self.age_labels,self.gender_labels,self.date_labels)]
-    print("Exporting labels to csv..")
-    df_ecglabels = pd.DataFrame(ecglabels)
-    df_ecglabels.to_csv(os.path.join('processed_data', 'ecgdblabels.csv'), index=False)
-    print("Export complete.")
-
-    print("Setting up DeepECG data features..")
-    self.extract_feats(self.dir)
-    print("Exporting feature set to csv..")
-    self.ecg_filsignal.to_csv(os.path.join('processed_data', 'filecgdata.csv'), index=False)
-    self.ecg_signal.to_csv(os.path.join('processed_data', 'unfilecgdata.csv'), index=False)
-    print("Export complete.")
-
-    if(os.path.isfile(os.path.join('processed_data', 'filecgdata' + "." + 'csv')) and os.path.isfile(os.path.join('processed_data', 'unfilecgdata' + "." + 'csv'))):
-      print("Data in processed_data/ folder is now ready for training.")
 
 #aligns dataset by first max peak
 class Augmentation:
